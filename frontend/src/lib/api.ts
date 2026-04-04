@@ -1,4 +1,5 @@
-const API_BASE_URL = "http://localhost:8000/api"
+const apiUrl = import.meta.env.VITE_API_URL;
+const API_BASE_URL = `${apiUrl}/api`
 
 export interface DataInfo {
   shape: number[]
