@@ -6,8 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import Badge from "@/components/ui/badge"
+import { Expand, X } from "lucide-react"
 import {
   BarChart,
   Bar,
@@ -20,6 +19,8 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ScatterChart,
+  Scatter,
 } from "recharts"
 
 // Color scheme from index.css using CSS variables
@@ -145,130 +146,425 @@ function DetectionSummary({ results }: { results?: any }) {
   )
 }
 
-// Feature Analysis Component
-function FeatureAnalysis({ dataInfo }: { dataInfo?: any }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Feature Information</CardTitle>
-        <CardDescription>
-          Columns and data types from uploaded dataset
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {/* Columns */}
-          {dataInfo?.columns && (
-            <>
-              <div>
-                <p className="mb-2 text-sm font-medium text-card-foreground">
-                  Total Features: {dataInfo.columns.length}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {dataInfo.columns.map((col: string, index: number) => (
-                    <Badge key={index} variant="secondary">
-                      {col}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <Separator />
-            </>
-          )}
-
-          {/* Data Types */}
-          {dataInfo?.dtypes && (
-            <div>
-              <p className="mb-3 text-sm font-medium text-card-foreground">
-                Data Types
-              </p>
-              <div className="space-y-2 text-xs">
-                {Object.entries(dataInfo.dtypes).map(([col, dtype]: [string, any], idx) => (
-                  <div key={idx} className="flex justify-between rounded bg-muted/50 p-2">
-                    <span className="font-medium">{col}</span>
-                    <Badge variant="outline">{String(dtype)}</Badge>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Missing Values */}
-          {dataInfo?.missing_values && (
-            <>
-              <Separator />
-              <div>
-                <p className="mb-3 text-sm font-medium text-card-foreground">
-                  Missing Values
-                </p>
-                <div className="space-y-2 text-xs">
-                  {Object.entries(dataInfo.missing_values).map(
-                    ([col, count]: [string, any], idx) =>
-                      count > 0 && (
-                        <div
-                          key={idx}
-                          className="flex justify-between rounded bg-muted/50 p-2"
-                        >
-                          <span className="font-medium">{col}</span>
-                          <Badge variant="destructive">{count}</Badge>
-                        </div>
-                      )
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
 // Outlier Records Component
 function OutlierRecordsSample({ results }: { results?: any }) {
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({})
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [rowsToShow, setRowsToShow] = useState(10)
+
   if (!results?.outlier_records || results.outlier_records.length === 0) {
     return null
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Outlier Sample</CardTitle>
-        <CardDescription>
-          First 10 detected outliers from the dataset
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
+  // Define the expected column order from the dataset
+  const COLUMN_ORDER = [
+    "COORDINATES",
+    "borehole log",
+    "unit weight",
+    "moisture content",
+    "liquid limit",
+    "plastic limit",
+    "plasticity index",
+    "percent passing sieve 4",
+    "percent passing sieve 10",
+    "percent passing sieve 40",
+    "percent passing sieve 200",
+    "depth of soil (m)",
+    "USCS classification",
+    "soil bearing capacity",
+    "N - Values (raw)",
+    "Soil Condition based on GWT",
+    "GWT found",
+    "EH",
+    "CB",
+    "CS",
+    "CR",
+    "N60",
+    "Friction Angle",
+    "Cohesion",
+    "Surcharge",
+  ]
+
+  // Get all unique columns, excluding internal ones
+  const getAllColumns = () => {
+    const allCols = new Set<string>()
+    results.outlier_records.forEach((row: any) => {
+      Object.keys(row).forEach((col) => {
+        if (!["dbscan_outlier", "dbscan_label"].includes(col)) {
+          allCols.add(col)
+        }
+      })
+    })
+
+    // Sort columns based on COLUMN_ORDER, then append any additional columns
+    const sortedCols = Array.from(allCols)
+    return sortedCols.sort((a, b) => {
+      const indexA = COLUMN_ORDER.indexOf(a)
+      const indexB = COLUMN_ORDER.indexOf(b)
+
+      // If both are in the predefined order, use that order
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB
+      }
+      // If only one is in the predefined order, it comes first
+      if (indexA !== -1) return -1
+      if (indexB !== -1) return 1
+      // Otherwise, sort alphabetically
+      return a.localeCompare(b)
+    })
+  }
+
+  const allColumns = getAllColumns()
+
+  // Initialize visibility state on first render
+  if (Object.keys(columnVisibility).length === 0 && allColumns.length > 0) {
+    const initialVisibility: Record<string, boolean> = {}
+    allColumns.forEach((col) => {
+      initialVisibility[col] = true
+    })
+    setColumnVisibility(initialVisibility)
+  }
+
+  // Get visible columns
+  const visibleColumns = allColumns.filter((col) => columnVisibility[col] !== false)
+
+  // Toggle column visibility
+  const toggleColumn = (col: string) => {
+    setColumnVisibility((prev) => ({
+      ...prev,
+      [col]: !prev[col],
+    }))
+  }
+
+  // Toggle all columns
+  const toggleAllColumns = () => {
+    const allVisible = Object.values(columnVisibility).every((v) => v === true)
+    const newVisibility: Record<string, boolean> = {}
+    allColumns.forEach((col) => {
+      newVisibility[col] = !allVisible
+    })
+    setColumnVisibility(newVisibility)
+  }
+
+  // Table render function (reusable for both normal and expanded views)
+  const renderTable = (maxHeight?: string) => (
+    <>
+      <div className="rounded-lg bg-blue-500/10 border border-blue-500/30 p-3">
+        <p className="text-xs text-blue-900 dark:text-blue-100">
+          ℹ️ <span className="font-medium">Note:</span> Values displayed are from the original dataset, not scaled. Outliers were detected using scaled features for fair comparison.
+        </p>
+      </div>
+
+      {/* Column Selector */}
+      <div className="rounded-lg border border-border bg-muted/20 p-4">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="font-medium text-sm">Select Columns to Display</p>
+            <button
+              onClick={toggleAllColumns}
+              className="text-xs px-2 py-1 rounded bg-muted hover:bg-muted/80 transition-colors"
+            >
+              {Object.values(columnVisibility).every((v) => v === true)
+                ? "Deselect All"
+                : "Select All"}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {allColumns.map((col) => (
+              <label
+                key={col}
+                className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={columnVisibility[col] !== false}
+                  onChange={() => toggleColumn(col)}
+                  className="w-4 h-4 rounded cursor-pointer"
+                  style={{
+                    accentColor: "hsl(var(--chart-3))",
+                    borderColor: "hsl(var(--chart-3))",
+                  }}
+                />
+                <span className="text-xs text-muted-foreground truncate">
+                  {col}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      {visibleColumns.length > 0 ? (
+        <div className={`overflow-x-auto ${maxHeight ? maxHeight : ""}`}>
           <table className="min-w-full text-xs">
             <thead>
-              <tr className="border-b border-border">
-                {Object.keys(results.outlier_records[0] || {})
-                  .slice(0, 6)
-                  .map((col) => (
-                    <th
-                      key={col}
-                      className="px-3 py-2 text-left font-medium text-muted-foreground"
-                    >
-                      {col}
-                    </th>
-                  ))}
+              <tr className="border-b border-border bg-muted/50">
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground w-12">
+                  #
+                </th>
+                {visibleColumns.map((col) => (
+                  <th
+                    key={col}
+                    className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap"
+                  >
+                    {col}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {results.outlier_records.slice(0, 10).map((row: any, idx: number) => (
-                <tr key={idx} className="border-b border-border hover:bg-muted/50">
-                  {Object.entries(row)
-                    .slice(0, 6)
-                    .map(([, val]: [string, any]) => (
-                      <td key={String(val)} className="px-3 py-2 text-muted-foreground">
-                        {typeof val === "number" ? val.toFixed(2) : String(val)}
+              {results.outlier_records.slice(0, rowsToShow).map((row: any, idx: number) => (
+                <tr
+                  key={idx}
+                  className="border-b border-border hover:bg-muted/50 transition-colors"
+                >
+                  <td className="px-3 py-2 text-muted-foreground font-mono">
+                    {idx + 1}
+                  </td>
+                  {visibleColumns.map((col) => {
+                    const val = row[col]
+                    return (
+                      <td
+                        key={`${idx}-${col}`}
+                        className="px-3 py-2 text-muted-foreground font-mono"
+                      >
+                        {typeof val === "number"
+                          ? val.toFixed(3)
+                          : String(val).substring(0, 30)}
                       </td>
-                    ))}
+                    )
+                  })}
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <div className="text-center py-8">
+          <p className="text-xs text-muted-foreground">
+            No columns selected. Use the column selector above to display data.
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Showing {Math.min(rowsToShow, results.outlier_records.length)} of{" "}
+          {results.outlier_records.length} outliers ({visibleColumns.length} of{" "}
+          {allColumns.length} columns visible)
+        </p>
+
+        {rowsToShow < results.outlier_records.length && (
+          <button
+            onClick={() => setRowsToShow((prev) => prev + 10)}
+            className="w-full px-4 py-2 rounded-lg border border-border bg-muted/20 hover:bg-muted/40 text-sm font-medium transition-colors"
+          >
+            Load More
+          </button>
+        )}
+      </div>
+    </>
+  )
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle>Outlier Sample</CardTitle>
+            <CardDescription>
+              First 10 detected outliers - showing original (unscaled) values
+            </CardDescription>
+          </div>
+          <button
+            onClick={() => setIsExpanded(true)}
+            className="p-2 hover:bg-muted rounded-lg transition-colors"
+            title="Expand"
+          >
+            <Expand className="h-5 w-5 text-muted-foreground" />
+          </button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {renderTable()}
+        </CardContent>
+      </Card>
+
+      {/* Expanded Modal View */}
+      {isExpanded && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <Card className="w-full h-full max-w-7xl max-h-[90vh] flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b">
+              <div>
+                <CardTitle>Outlier Sample - Expanded View</CardTitle>
+                <CardDescription>
+                  First 10 detected outliers - showing original (unscaled) values
+                </CardDescription>
+              </div>
+              <button
+                onClick={() => setIsExpanded(false)}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+                title="Close"
+              >
+                <X className="h-5 w-5 text-muted-foreground" />
+              </button>
+            </CardHeader>
+            <CardContent className="space-y-4 flex-1 overflow-y-auto">
+              {renderTable("max-h-full")}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </>
+  )
+}
+
+// Scatter Plot Component for showing outlier separation
+function ScatterPlot({ results }: { results?: any }) {
+  const isDark = useDarkMode()
+  const axisStrokeColor = isDark ? '#b3b3b3' : '#666666'
+
+  // Generate scatter plot data from outlier and normal records
+  const scatterData = useMemo(() => {
+    if (!results?.outlier_records || !results?.normal_preview || !results?.preprocessing_report) {
+      return { data: [], xAxisName: "", yAxisName: "" }
+    }
+
+    // Get numeric columns from preprocessing report
+    const numericCols = results.preprocessing_report.numeric_cols || []
+    if (numericCols.length < 2) {
+      return { data: [], xAxisName: "", yAxisName: "" }
+    }
+
+    const xAxis = numericCols[0]
+    const yAxis = numericCols[1]
+
+    const data: any[] = []
+
+    // Add normal points (chart-1 color)
+    results.normal_preview.forEach((record: any, idx: number) => {
+      const x = record[xAxis]
+      const y = record[yAxis]
+      
+      // Only include points with valid numeric values
+      if (typeof x === "number" && typeof y === "number" && !isNaN(x) && !isNaN(y)) {
+        data.push({
+          x: Number(x.toFixed(3)),
+          y: Number(y.toFixed(3)),
+          type: "Normal",
+          name: `Normal Point ${idx + 1}`,
+        })
+      }
+    })
+
+    // Add outlier points (chart-2 color)
+    results.outlier_records.forEach((record: any, idx: number) => {
+      const x = record[xAxis]
+      const y = record[yAxis]
+      
+      // Only include points with valid numeric values
+      if (typeof x === "number" && typeof y === "number" && !isNaN(x) && !isNaN(y)) {
+        data.push({
+          x: Number(x.toFixed(3)),
+          y: Number(y.toFixed(3)),
+          type: "Outlier",
+          name: `Outlier ${idx + 1}`,
+        })
+      }
+    })
+
+    return { data, xAxisName: xAxis, yAxisName: yAxis }
+  }, [results])
+
+  if (scatterData.data.length === 0) {
+    return null
+  }
+
+  // Separate data by type for rendering different scatter series with different colors
+  const normalData = scatterData.data.filter((point) => point.type === "Normal")
+  const outlierData = scatterData.data.filter((point) => point.type === "Outlier")
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Outlier Separation Visualization</CardTitle>
+        <CardDescription>
+          Distance between outliers and normal points in feature space ({scatterData.xAxisName} vs {scatterData.yAxisName})
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={500}>
+          <ScatterChart
+            margin={{ top: 20, right: 20, bottom: 60, left: 60 }}
+            data={scatterData.data}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke={axisStrokeColor} />
+            <XAxis
+              type="number"
+              dataKey="x"
+              name={scatterData.xAxisName}
+              stroke={axisStrokeColor}
+              label={{ value: scatterData.xAxisName, position: "insideBottomRight", offset: -10 }}
+            />
+            <YAxis
+              type="number"
+              dataKey="y"
+              name={scatterData.yAxisName}
+              stroke={axisStrokeColor}
+              label={{ value: scatterData.yAxisName, angle: -90, position: "insideLeft" }}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "hsl(var(--background))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "8px",
+                color: "hsl(var(--foreground))",
+              }}
+              cursor={{ strokeDasharray: "3 3" }}
+              content={({ active, payload }) => {
+                if (active && payload && payload[0]) {
+                  const data = payload[0].payload
+                  return (
+                    <div className="bg-background rounded border border-border p-2 text-xs">
+                      <p className="font-medium">{data.type}</p>
+                      <p className="text-muted-foreground">
+                        {scatterData.xAxisName}: {data.x}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {scatterData.yAxisName}: {data.y}
+                      </p>
+                    </div>
+                  )
+                }
+                return null
+              }}
+            />
+            <Legend
+              verticalAlign="top"
+              height={36}
+              wrapperStyle={{ paddingTop: "20px" }}
+            />
+            {/* Normal Points Series */}
+            <Scatter
+              name="Normal Points"
+              data={normalData}
+              fill={CHART_COLORS.chart1}
+              isAnimationActive={false}
+            />
+            {/* Outlier Points Series */}
+            <Scatter
+              name="Outliers"
+              data={outlierData}
+              fill={CHART_COLORS.chart2}
+              isAnimationActive={false}
+            />
+          </ScatterChart>
+        </ResponsiveContainer>
+        
+        <div className="mt-6 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+          <p className="text-xs text-blue-900 dark:text-blue-100">
+            <span className="font-medium">💡 Interpretation:</span> This scatter plot shows how DBSCAN distinguishes between normal and outlier points in the feature space. Points that are spatially separated from the main cluster are identified as outliers (shown in red). The visualization uses the scaled numeric features for distance calculation but displays original values.
+          </p>
         </div>
       </CardContent>
     </Card>
@@ -278,16 +574,15 @@ function OutlierRecordsSample({ results }: { results?: any }) {
 // Main Visualization Component
 export default function VisualizationSection({
   results,
-  dataInfo,
 }: {
   results?: any
-  dataInfo?: any
 }) {
   return (
     <>
       <DetectionSummary results={results} />
-      <FeatureAnalysis dataInfo={dataInfo} />
+      {/* <ScatterPlot results={results} /> */}
       <OutlierRecordsSample results={results} />
     </>
   )
 }
+

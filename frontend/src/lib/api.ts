@@ -100,7 +100,7 @@ export async function dbscanAnalyzeData(file: File): Promise<{ data_analysis: Re
 
 // DBSCAN Pipeline: Step 2 - Preprocess
 export async function dbscanPreprocess(
-  handleMissing: string = "drop",
+  handleMissing: string = "ffill",
   scaleMethod: string = "robust"
 ): Promise<{ preprocessing_report: PreprocessingReport }> {
   const response = await fetch(`${API_BASE_URL}/preprocess/dbscan`, {
@@ -113,11 +113,11 @@ export async function dbscanPreprocess(
       scale_method: scaleMethod,
     }),
   })
-
+  console.log("Preprocess response status:", response.status, 'handleMissing:', handleMissing, 'scaleMethod:', scaleMethod)
   if (!response.ok) {
     throw new Error(`Preprocessing failed: ${response.statusText}`)
   }
-
+  
   return await response.json()
 }
 

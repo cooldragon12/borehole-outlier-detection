@@ -61,7 +61,7 @@ export function Dashboard() {
 
       // Step 2: Preprocess
       console.log("Step 2: Preprocessing data...")
-      await dbscanPreprocess("drop", "robust")
+      await dbscanPreprocess("ffill", "robust")
       setPipeline((p) => ({ ...p, step2_preprocessed: true }))
 
       // Step 3: Detect outliers
@@ -198,6 +198,25 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* DBSCAN Detection Results */}
+        {pipeline.step3_detected && dbscanResults && (
+          <DBScanResultsSection
+            results={{
+              outlier_count: detectionStats?.outlier_count || 0,
+              outlier_percentage: detectionStats?.outlier_percentage || 0,
+              normal_count: detectionStats?.normal_count || 0,
+              preprocessing_report: dbscanResults?.preprocessing_report,
+            }}
+          />
+        )}
+
+        {/* Visualizations */}
+        {pipeline.step4_results && (
+          <VisualizationSection
+            results={dbscanResults}
+          />
+        )}
+
         {/* Data Overview */}
         {pipeline.step1_analyzed && (
           <Card>
@@ -254,26 +273,8 @@ export function Dashboard() {
             </CardContent>
           </Card>
         )}
+        
 
-        {/* DBSCAN Detection Results */}
-        {pipeline.step3_detected && dbscanResults && (
-          <DBScanResultsSection
-            results={{
-              outlier_count: detectionStats?.outlier_count || 0,
-              outlier_percentage: detectionStats?.outlier_percentage || 0,
-              normal_count: detectionStats?.normal_count || 0,
-              preprocessing_report: dbscanResults?.preprocessing_report,
-            }}
-          />
-        )}
-
-        {/* Visualizations */}
-        {pipeline.step4_results && (
-          <VisualizationSection
-            results={dbscanResults}
-            dataInfo={currentDataInfo}
-          />
-        )}
       </div>
     </div>
   )
