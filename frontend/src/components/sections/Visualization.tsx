@@ -173,14 +173,9 @@ function OutlierRecordsSample({ results }: { results?: any }) {
     "N - Values (raw)",
     "Soil Condition based on GWT",
     "GWT found",
-    "EH",
-    "CB",
-    "CS",
-    "CR",
     "N60",
     "Friction Angle",
-    "Cohesion",
-    "Surcharge",
+    "Cohesion"
   ]
 
   // Get all unique columns, excluding internal ones
