@@ -177,13 +177,13 @@ function OutlierRecordsSample({ results }: { results?: any }) {
     "Friction Angle",
     "Cohesion"
   ]
-
+  const EXCEPT_COLUMNS = ["EH", "CB", "CS", "CR", "Surcharge"]  // Columns to exclude from DBSCAN (e.g., binary, categorical)
   // Get all unique columns, excluding internal ones
   const getAllColumns = () => {
     const allCols = new Set<string>()
     results.outlier_records.forEach((row: any) => {
       Object.keys(row).forEach((col) => {
-        if (!["dbscan_outlier", "dbscan_label"].includes(col)) {
+        if (!["dbscan_outlier", "dbscan_label"].includes(col) && !EXCEPT_COLUMNS.includes(col)) {
           allCols.add(col)
         }
       })
