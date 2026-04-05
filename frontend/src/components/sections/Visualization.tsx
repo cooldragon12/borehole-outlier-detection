@@ -19,8 +19,6 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ScatterChart,
-  Scatter,
 } from "recharts"
 
 // Color scheme from index.css using CSS variables
